@@ -1,0 +1,27 @@
+name: cloudscale
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: {POSTGRES_USER: cloudscale, POSTGRES_PASSWORD: cloudscale, POSTGRES_DB: cloudscale}
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U cloudscale"], interval: 5s, timeout: 3s, retries: 20}
+  redis:
+    image: redis:7-alpine
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20}
+  kafka:
+    image: bitnami/kafka:3.9
+    environment: {KAFKA_CFG_NODE_ID: 1, KAFKA_CFG_PROCESS_ROLES: "broker,controller", KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093", KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093", KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092", KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT", KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER, KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"}
+    healthcheck: {test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"], interval: 10s, timeout: 5s, retries: 20}
+  api:
+    build: {context: ., args: {SERVICE: api}}
+    env_file: [.env]
+    ports: ["8080:8080"]
+    depends_on: {postgres: {condition: service_healthy}, kafka: {condition: service_healthy}}
+  worker:
+    build: {context: ., args: {SERVICE: worker}}
+    env_file: [.env]
+    deploy: {replicas: 3}
+    depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}, kafka: {condition: service_healthy}}
+  audit:
+    build: ./audit-service
+    depends_on: {postgres: {condition: service_healthy}, kafka: {condition: service_healthy}}
+

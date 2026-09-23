@@ -1,0 +1,7 @@
+.env
+bin/
+target/
+*.log
+.idea/
+.DS_Store
+

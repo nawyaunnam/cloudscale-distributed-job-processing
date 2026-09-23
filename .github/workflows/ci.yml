@@ -1,0 +1,28 @@
+name: CI
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.23", cache: false}
+      - run: go mod tidy
+      - run: go vet ./...
+      - run: go test ./...
+  java:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: audit-service}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "21", cache: maven}
+      - run: mvn --batch-mode package -DskipTests
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose config --quiet
+      - run: docker compose build api worker audit

@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/cloudscale
+    username: cloudscale
+    password: cloudscale
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+  sql:
+    init:
+      mode: always
+

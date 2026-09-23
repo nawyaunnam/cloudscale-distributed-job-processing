@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cloudscale-api}
+spec:
+  replicas: 3
+  selector: {matchLabels: {app: cloudscale-api}}
+  template:
+    metadata: {labels: {app: cloudscale-api}}
+    spec:
+      containers:
+        - {name: api, image: "ghcr.io/nawyaunnam/cloudscale-api:latest", ports: [{containerPort: 8080}], envFrom: [{secretRef: {name: cloudscale-secrets}}], readinessProbe: {httpGet: {path: /health, port: 8080}}, resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 1, memory: 512Mi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: cloudscale-api}
+spec: {selector: {app: cloudscale-api}, ports: [{port: 80, targetPort: 8080}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cloudscale-worker}
+spec:
+  replicas: 4
+  selector: {matchLabels: {app: cloudscale-worker}}
+  template:
+    metadata: {labels: {app: cloudscale-worker}}
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - {name: worker, image: "ghcr.io/nawyaunnam/cloudscale-worker:latest", envFrom: [{secretRef: {name: cloudscale-secrets}}], resources: {requests: {cpu: 250m, memory: 256Mi}, limits: {cpu: 2, memory: 1Gi}}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: cloudscale-worker}
+spec: {scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: cloudscale-worker}, minReplicas: 4, maxReplicas: 50, metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 65}}}]}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: cloudscale-worker}
+spec: {minAvailable: 2, selector: {matchLabels: {app: cloudscale-worker}}}
+
