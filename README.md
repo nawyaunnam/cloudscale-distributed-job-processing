@@ -1,6 +1,6 @@
 # CloudScale
 
-CloudScale is a production-oriented distributed job execution platform. A Go API accepts authenticated, idempotent submissions; Kafka distributes work; horizontally scaled Go workers execute jobs under renewable PostgreSQL leases; Redis tracks worker liveness; and a Java service writes an independent audit trail.
+CloudScale is a distributed job-processing prototype. A Go API accepts authenticated, idempotent submissions; Kafka distributes work; horizontally scaled Go workers execute jobs under renewable PostgreSQL leases; Redis tracks worker liveness; and a Java service writes an independent audit trail.
 
 ```mermaid
 flowchart LR
@@ -17,11 +17,15 @@ flowchart LR
  H[KEDA / HPA] --> W
 ```
 
+## Current reliability boundary
+
+The database, Kafka, and worker paths are implemented, but the full failure semantics still need hardening. The [worker](cmd/worker/main.go) currently ignores several state/publish errors and commits a message after a lease error. Expired-lease recovery in the [store](internal/store/store.go) also needs attempt-limit enforcement. CI builds the services and runs the included Go checks; it does not establish recovery under broker or database outages.
+
 ## Distributed-systems behavior
 
 - **Idempotency:** `(tenant_id, Idempotency-Key)` is unique. Client retries resolve to the existing durable job.
-- **At-least-once delivery:** Kafka offsets are committed after terminal state or retry publication. PostgreSQL state guards duplicate execution.
-- **Leases and heartbeats:** workers claim queued work with an owner and expiry, renew every 10 seconds, and stop updating when ownership is lost.
+- **Delivery:** Kafka distributes job IDs, and PostgreSQL tracks execution state. Publication/state failures and offset commits are not yet coordinated reliably; see the boundary above.
+- **Leases and heartbeats:** workers claim queued work with an owner and expiry and attempt renewal every 10 seconds. The store scopes writes by owner; the worker still needs to act on renewal failures.
 - **Failure recovery:** a sweeper requeues jobs whose worker lease expired. Retries use bounded attempts and incremental backoff.
 - **Dead letters:** malformed messages and exhausted jobs enter `jobs.dlq`; the Java audit consumer preserves them for investigation.
 - **Ordering and scale:** messages are keyed by job ID. Kafka partitions bound worker concurrency; Kubernetes HPA is provided and KEDA is recommended for consumer-lag scaling.
